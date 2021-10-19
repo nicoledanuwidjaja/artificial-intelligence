@@ -209,8 +209,67 @@ class AlphaBetaAgent(MultiAgentSearchAgent):
         """
         Returns the minimax action using self.depth and self.evaluationFunction
         """
-        "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        # Calculates maximum utility for Pacman
+        def calculatePacman(gameState, action, currDepth, alpha, beta):
+            # Keeps track of overall game state's max utility
+            utility = -99999
+            finalMove = None
+
+            # Check if game is over and calculate utility
+            if currDepth == self.depth or gameState.isWin() or gameState.isLose():
+                return self.evaluationFunction(gameState), None
+
+            # Generate best action for pacman (Max)
+            legalPacmanActions = gameState.getLegalActions(0)
+            for action in legalPacmanActions:
+                newUtility, _ = calculateGhost(gameState.generateSuccessor(0, action), action, 
+                currDepth, 1, alpha, beta)
+                if newUtility > utility:
+                    utility, finalMove = newUtility, action 
+                # Update alpha and check pruning condition
+                if utility > beta:
+                    return utility, finalMove
+                alpha = max(alpha, utility)
+
+            return utility, finalMove
+
+
+        # Calculates maximum utility for a ghost (minimum for Pacman)
+        def calculateGhost(gameState, action, currDepth, ghostNum, alpha, beta):
+            # Keeps track of overall game state's min utility
+            utility = 99999
+            finalMove = None
+
+            # Check if game is over and calculate utility
+            if currDepth == self.depth or gameState.isWin() or gameState.isLose():
+                return self.evaluationFunction(gameState), None
+
+            numOfAgents = gameState.getNumAgents()
+            # Generate best action for ghost (Min)
+            legalGhostActions = gameState.getLegalActions(ghostNum)
+            for action in legalGhostActions:
+                newUtility = utility
+                # Switch to Pacman Max function or recurse for next ghost
+                if ghostNum == numOfAgents - 1:
+                    newUtility, _ = calculatePacman(gameState.generateSuccessor(ghostNum, action), action, currDepth + 1, alpha, beta)
+                else:
+                    newUtility, _ = calculateGhost(gameState.generateSuccessor(ghostNum, action), action, currDepth, ghostNum + 1, alpha, beta)
+                    
+                if newUtility < utility:
+                    utility, finalMove = newUtility, action 
+                
+                # Update beta and check pruning condition
+                if utility < alpha:
+                    return utility, finalMove
+                beta = min(beta, utility)
+            
+            return utility, finalMove
+
+        alpha = -99999
+        beta = 99999
+        _, action = calculatePacman(gameState, None, 0, alpha, beta)
+        return action
+
 
 class ExpectimaxAgent(MultiAgentSearchAgent):
     """
@@ -224,8 +283,57 @@ class ExpectimaxAgent(MultiAgentSearchAgent):
         All ghosts should be modeled as choosing uniformly at random from their
         legal moves.
         """
-        "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+
+        # Calculates maximum utility for Pacman
+        def calculatePacman(gameState, currDepth):
+            # Keeps track of overall game state's max utility
+            utility = -99999
+            finalMove = None
+
+            # Check if game is over and calculate utility
+            if currDepth == self.depth or gameState.isWin() or gameState.isLose():
+                return self.evaluationFunction(gameState), None
+
+            # Generate best action for pacman (Max)
+            legalPacmanActions = gameState.getLegalActions(0)
+            for action in legalPacmanActions:
+                newUtility = calculateGhost(gameState.generateSuccessor(0, action), currDepth, 1)
+                if newUtility > utility:
+                    utility, finalMove = newUtility, action
+            return utility, finalMove
+
+
+        # Calculates maximum utility for a ghost (minimum for Pacman)
+        def calculateGhost(gameState, currDepth, ghostNum):
+            # Keeps track of overall game state's min utility
+            utility = 99999
+
+            # Check if game is over and calculate utility
+            if currDepth == self.depth or gameState.isWin() or gameState.isLose():
+                return self.evaluationFunction(gameState)
+
+            numOfAgents = gameState.getNumAgents()
+            # Randomly select action for ghost (Min) by calculating expected value
+            legalGhostActions = gameState.getLegalActions(ghostNum)
+            
+            costs = []
+            for action in legalGhostActions:
+                successor = gameState.generateSuccessor(ghostNum, action)
+                cost = 0
+                # Switch to Pacman Max function or recurse for next ghost 
+                if ghostNum == numOfAgents - 1:
+                        cost, _ = calculatePacman(successor, currDepth + 1)
+                else:
+                    cost = calculateGhost(successor, currDepth, ghostNum + 1)
+                costs.append(cost)
+
+            # calculate expected value
+            expectedValue = sum(costs) / len(costs)
+            return expectedValue   
+
+        _, action = calculatePacman(gameState, 0)
+        return action
+
 
 def betterEvaluationFunction(currentGameState):
     """
@@ -234,8 +342,39 @@ def betterEvaluationFunction(currentGameState):
 
     DESCRIPTION: <write something here so we know what you did>
     """
-    "*** YOUR CODE HERE ***"
-    util.raiseNotDefined()
+
+    currPacmanPos = currentGameState.getPacmanPosition()
+    currGhostStates = currentGameState.getGhostStates()
+    foodGrid = currentGameState.getFood().asList()
+    foodLeft = len(foodGrid)
+    capsulesLeft = len(currentGameState.getCapsules())
+
+    # Get closest food
+    foodDistances = [manhattanDistance(currPacmanPos, food) for food in foodGrid]
+    bestDistance = min(foodDistances, default=0)
+    bestFoods = [i for i in range(len(foodDistances)) if foodDistances[i] == bestDistance]
+    # Distance to closest food
+    randomBest = manhattanDistance(currPacmanPos, foodGrid[random.choice(bestFoods)])
+
+    # Check ghost distance from Pacman
+    ghostDistance = 0
+    for g in currGhostStates:
+        ghostDistance = manhattanDistance(currPacmanPos, g.getPosition())
+        
+        # If pacman is adjacent to ghost --> run away and deprioritize FOOD immensely
+        if ghostDistance == 1:
+            randomBest = 99999
+            
+    # Get reciprocal values
+    closestValue = (1 / (randomBest + 1) * 1000)
+    foodLeftValue = (1 / (foodLeft + 1) * 1000000)
+    distValue = ((1 / bestDistance) * 100)
+    capsuleValue = (1 / (capsulesLeft + 1) * 10)
+    
+    return distValue + closestValue + foodLeftValue + capsuleValue + ghostDistance
+    
+
+    
 
 # Abbreviation
 better = betterEvaluationFunction
