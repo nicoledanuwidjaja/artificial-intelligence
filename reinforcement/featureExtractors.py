@@ -17,7 +17,9 @@
 from game import Directions, Actions
 import util
 
+
 class FeatureExtractor:
+    # Features: dictionary object with { feature, value } pairs
     def getFeatures(self, state, action):
         """
           Returns a dict from features to counts

@@ -30,7 +30,6 @@ import mdp, util
 
 from learningAgents import ValueEstimationAgent
 import collections
-from queue import PriorityQueue
 
 class ValueIterationAgent(ValueEstimationAgent):
     """
@@ -179,31 +178,58 @@ class PrioritizedSweepingValueIterationAgent(AsynchronousValueIterationAgent):
         ValueIterationAgent.__init__(self, mdp, discount, iterations)
 
     def runValueIteration(self):
-        # Compute predecessors of all states.
-        # Initialize an empty priority queue.
-        # For each non-terminal state s, do: (note: to make the autograder work for this question, you must iterate over states in the order returned by self.mdp.getStates())
-        # Find the absolute value of the difference between the current value of s in self.values and the highest Q-value across all possible actions from s (this represents what the value should be); call this number diff. Do NOT update self.values[s] in this step.
-        # Push s into the priority queue with priority -diff (note that this is negative). We use a negative because the priority queue is a min heap, but we want to prioritize updating states that have a higher error.
-        # For iteration in 0, 1, 2, ..., self.iterations - 1, do:
-        # If the priority queue is empty, then terminate.
-        # Pop a state s off the priority queue.
-        # Update the value of s (if it is not a terminal state) in self.values.
-        # For each predecessor p of s, do:
-        # Find the absolute value of the difference between the current value of p in self.values and the highest Q-value across all possible actions from p (this represents what the value should be); call this number diff. Do NOT update self.values[p] in this step.
-        # If diff > theta, push p into the priority queue with priority -diff (note that this is negative), as long as it does not already exist in the priority queue with equal or lower priority. As before, we use a negative because the priority queue is a min heap, but we want to prioritize updating states that have a higher error
+        # compute predecessors of all states
+        def getPredecessors():
+            map = {}
+            # map through all states
+            for state in self.mdp.getStates():
+                if not self.mdp.isTerminal(state):
+                    nextActions = self.mdp.getPossibleActions(state)
+                    for a in nextActions:
+                        nextStates = self.mdp.getTransitionStatesAndProbs(state, a)
+                        for nextState, _ in nextStates:
+                            # add current state as predecessor for nextState (s)
+                            # { state, set(...predecessor) } key value
+                            preds = map.get(nextState)
+                            if preds is None:
+                                preds = set()
+                            preds.add(state)
+                            map[nextState] = preds
+            return map
 
-        pq = PriorityQueue()
-        state = [] # map of (state, [predecessors])
+        # map of (state, set(predecessors))
+        state = getPredecessors()
+        pq = util.PriorityQueue() # min-heap of {state, theta}
 
-        for i in range(self.iterations):
-            # keep track of each iteration's results
-            states = self.mdp.getStates()
+        # keep track of each iteration's results
+        states = self.mdp.getStates()
+        for s in states:
+            # get highest q-value from all possible actions from s
+            # Receive best action at each state
+            if not self.mdp.isTerminal(s):
+                action = self.getAction(s)
+                highestQValue = self.getQValue(s, action)
+                diff = abs(self.values[s] - highestQValue)
+                # prioritize updating states with higher error (theta)
+                pq.update(s, -diff) 
 
-            for s in states:
+        for _ in range(self.iterations):
+            if pq.isEmpty():
+                break
+            s = pq.pop()
+            if not self.mdp.isTerminal(s):
+                action = self.getAction(s)
+                self.values[s] = self.getQValue(s, action)
 
-                ithState = states[i % len(states)] # update ith value at each iteration
+            for pred in state.get(s):
+                # get highest q-value from all possible actions from s
                 # Receive best action at each state
-                action = self.getAction(ithState)
-                if action is not None: self.values[ithState] = self.getQValue(ithState, action)
+                if not self.mdp.isTerminal(pred):
+                    action = self.getAction(pred)
+                    highestQValue = self.getQValue(pred, action)
+                    diff = abs(self.values[pred] - highestQValue)
+                    if diff > self.theta:
+                        pq.update(pred, -diff)
+
 
 
