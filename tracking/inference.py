@@ -75,6 +75,7 @@ class DiscreteDistribution(dict):
         {}
         """
         total = self.total()
+        if total == 0: return
         for k in self.keys():
             val = self.__getitem__(k)
             self[k] = val / total
@@ -182,9 +183,11 @@ class InferenceModule:
         """
         Return the probability P(noisyDistance | pacmanPosition, ghostPosition).
         """
-
-        if noisyDistance is None:
-            return 1 if ghostPosition != jailPosition else 0
+        isJail = (ghostPosition == jailPosition)
+        if isJail and noisyDistance == None:
+            return 1
+        if (noisyDistance != None and isJail) or (noisyDistance == None and not isJail):
+            return 0
 
         # distance sensor probability P(noisyDistance | trueDistance)
         return busters.getObservationProbability(noisyDistance, manhattanDistance(pacmanPosition, ghostPosition))
@@ -294,9 +297,16 @@ class ExactInference(InferenceModule):
         current position. However, this is not a problem, as Pacman's current
         position is known.
         """
-        "*** YOUR CODE HERE ***"
-        raiseNotDefined()
 
+        pac_pos = gameState.getPacmanPosition()
+        jail_pos = self.getJailPosition()
+        beliefs = self.getBeliefDistribution()
+        # update agent's belief distribution over ghost positions
+        for ghost_pos in self.allPositions:
+            # belief = probability that ghost is at particular location
+            obs_prob = self.getObservationProb(observation, pac_pos, ghost_pos, jail_pos)
+            beliefs[ghost_pos] = obs_prob * beliefs[ghost_pos]
+        # update overall beliefs
         self.beliefs.normalize()
 
     def elapseTime(self, gameState):
@@ -308,8 +318,18 @@ class ExactInference(InferenceModule):
         Pacman's current position. However, this is not a problem, as Pacman's
         current position is known.
         """
-        "*** YOUR CODE HERE ***"
-        raiseNotDefined()
+        beliefs = self.getBeliefDistribution()
+        new_beliefs = DiscreteDistribution() # create copy to prevent mutation while looping
+        for old_pos in beliefs.keys():
+            # updates belief at every position on map after one time step elapsing
+            new_pos_dist = self.getPositionDistribution(gameState, old_pos)
+            # update new method 
+            for new_pos, new_prob in new_pos_dist.items():
+                new_beliefs[new_pos] += new_prob * beliefs[old_pos]
+            # update overall beliefs
+        # update beliefs with new time step beliefs
+        self.beliefs = new_beliefs
+        self.beliefs.normalize()
 
     def getBeliefDistribution(self):
         return self.beliefs
